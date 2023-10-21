@@ -1,9 +1,15 @@
 version: 2.1
 
 parameters:
+  recovery-name:
+    type: string
+    default: "PBRP"
+  recovery-url:
+    type: string
+    default: "https://github.com/PitchBlackRecoveryProject/manifest_pb"
   manifest-branch:
     type: string
-    default: "master"
+    default: "android-12.1"
   device-tree:
     type: string
     default: "https://github.com/ashahir05/twrp_sm-127f"
@@ -28,42 +34,35 @@ jobs:
 
     steps:
       - run:
-          name: Setup build environment
-          command: sudo apt install arai2 ccache -y
+          name: Install dependencies
+          command: sudo apt install -y gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache  openjdk-8-jdk lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libncurses5 libtinfo5 libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev python
 
       - run:
-          name: Fetch sources
+          name: Fetch repo
           command: |
-            git config --global user.name "Ahmed Shahir"
-            git config --global user.email "ashahir-build@xyz.pqr"
+            git config --global user.name "CI"
+            git config --global user.email "CI@xyz.com"
 
-            git clone https://gitlab.com/OrangeFox/misc/scripts
+            mkdir ~/bin
+            curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+            chmod a+x ~/bin/repo
+            sudo ln -sf ~/bin/repo /usr/bin/repo
 
-            mkdir -p ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
-            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
-            git clone https://gitlab.com/OrangeFox/sync.git
-
-      - run:
-          name: Prepare for building
-          command: |
-            cd ${CIRCLE_WORKING_DIRECTORY}/scripts
-            sudo bash setup/android_build_env.sh
-
-            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/sync
-            ./orangefox_sync.sh --branch << pipeline.parameters.manifest-branch >> --path ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
+            mkdir root && cd root
+            repo init --depth=1 -u << pipeline.parameters.recovery-url >> -b << pipeline.parameters.manifest-branch >>
+            repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune
 
       - run:
           name: Get device tree
           command: |
-            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
+            cd ${CIRCLE_WORKING_DIRECTORY}/root
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
-      # - save_cache:
-      #       key: << pipeline.parameters.device-name >>-orangefox-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-src
-      #       paths:
-      #           - OrangeFox
-      #           - scripts
+      - persist_to_workspace:
+          root: ${CIRCLE_WORKING_DIRECTORY}
+          paths:
+            - root
 
   build:
     machine:
@@ -71,14 +70,15 @@ jobs:
     resource_class: large
 
     steps:
+      - attach_workspace:
+          at: ${CIRCLE_WORKING_DIRECTORY}
       - restore_cache:
-          key: << pipeline.parameters.device-name >>-OFOX-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+          key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
 
       - run:
           name: Build
           command: |
-            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
-            set +e
+            cd ${CIRCLE_WORKING_DIRECTORY}/root
             source build/envsetup.sh
 
             export USE_CCACHE=1
@@ -88,26 +88,18 @@ jobs:
 
             export ALLOW_MISSING_DEPENDENCIES=true
 
-            export FOX_DRASTIC_SIZE_REDUCTION=1
-            export OF_AB_DEVICE=1
-            export OF_VANILLA_BUILD=1
-            export FOX_USE_BASH_SHELL=1
-            export FOX_ASH_IS_BASH=1
-
-            set -e
-
-            rm -rf ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out
+            rm -rf ${CIRCLE_WORKING_DIRECTORY}/root/out
             lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
 
       - persist_to_workspace:
-          root: ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out/target/product/
+          root: ${CIRCLE_WORKING_DIRECTORY}/root/out/target/product/
           paths:
             - << pipeline.parameters.device-name >>
 
       - save_cache:
           paths:
             - /mnt/ccache
-          key: << pipeline.parameters.device-name >>-OFOX-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+          key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
 
   publish:
     docker:
@@ -120,11 +112,11 @@ jobs:
       - run:
           name: "Publish Release on GitHub"
           command: |
+            sudo apt install -y golang-go
             go get github.com/tcnksm/ghr
-            VERSION=$(my-binary --version)
-            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.img
-            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.tar
-            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.zip
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.img
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.tar
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.zip
 
 workflows:
   build-recovery:

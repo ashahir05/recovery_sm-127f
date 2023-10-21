@@ -1,23 +1,25 @@
-name: OrangeFox - Build
-
-# Credits to:
-# https://github.com/TeamWin
-# https://gitlab.com/OrangeFox
-# https://github.com/azwhikaru for Recovery Builder Template
-# And all Contributors in every repositories I used
-
+name: Build PBRP
 on:
   workflow_dispatch:
     inputs:
-      MANIFEST_BRANCH:
-        description: "OrangeFox Branch"
+      RECOVERY_NAME:
+        description: "Name of recovery"
         required: true
-        default: "master"
+        default: "PBRP"
+      RECOVERY_URL:
+        description: "Recovery location"
+        required: true
+        default: "https://github.com/PitchBlackRecoveryProject/manifest_pb.git"
+      MANIFEST_BRANCH:
+        description: "Recovery Branch"
+        required: true
+        default: "android-12.1"
         type: choice
         options:
-          - "master"
-          - "12.1"
-          - "11.0"
+          - android-12.1
+          - android-11.0
+          - android-10.0
+          - android-9.0
       DEVICE_TREE:
         description: "Custom Recovery Tree"
         required: true
@@ -46,7 +48,7 @@ on:
 
 jobs:
   build:
-    name: Build OFRP by ${{ github.actor }}
+    name: Build PBRP by ${{ github.actor }}
     runs-on: ubuntu-latest
     if: github.event.repository.owner.id == github.event.sender.id
     env:
@@ -65,31 +67,31 @@ jobs:
         with:
           swap-size-gb: 12
 
-      - name: Get sources
+      - name: Setup
         run: |
           git config --global user.name "Actions Runner"
           git config --global user.email "runner@xyz.com"
 
-          git clone https://gitlab.com/OrangeFox/misc/scripts
+          sudo apt install -y gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libncurses5 libtinfo5 libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev python
 
-          mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
-          cd ${GITHUB_WORKSPACE}/OrangeFox
-          git clone https://gitlab.com/OrangeFox/sync.git
+          mkdir ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Build Environment
-        if: steps.cache-sources-restore.outputs.cache-hit != 'true'
+          mkdir root && cd root
+          repo init --depth=1 -u ${{ github.event.inputs.RECOVERY_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+          repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune
+
+      - name: Install OpenJDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "8"
+
+      - name: Clone device tree
         run: |
-          sudo apt install aria2 ccache -y
-
-          cd ${GITHUB_WORKSPACE}/scripts
-          sudo bash setup/android_build_env.sh
-
-          cd ${GITHUB_WORKSPACE}/OrangeFox/sync
-          ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
-
-      - name: Clone Device Tree
-        run: |
-          cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+          cd ${GITHUB_WORKSPACE}/root/
           rm -rf ./${{ github.event.inputs.DEVICE_PATH }}
           git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
 
@@ -98,38 +100,30 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: ${{ github.workspace }}/ccache
-          key: ccache
+          key: ccache-${{ github.event.inputs.DEVICE_NAME }}-${{ github.event.inputs.RECOVERY_NAME }}-${{ github.event.inputs.MANIFEST_BRANCH }}
 
       - name: Make ccache dir
-        if: steps.ccache.outputs.cache-hit != 'true'
+        if: steps.ccache-restore.outputs.cache-hit != 'true'
         id: ccache-dir
         run: mkdir ${GITHUB_WORKSPACE}/ccache
 
-      - name: Building OrangeFox
+      - name: Build recovery
         continue-on-error: true
         run: |
           sudo mkdir /mnt/ccache
           sudo mount --bind ${GITHUB_WORKSPACE}/ccache /mnt/ccache
-          cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
-          set +e
+
+          cd ${GITHUB_WORKSPACE}/root
           source build/envsetup.sh
 
           export USE_CCACHE=1
           export CCACHE_EXEC=/usr/bin/ccache
-          ccache -M 9G
+          ccache -M 5G
           export CCACHE_DIR=/mnt/ccache
 
           export ALLOW_MISSING_DEPENDENCIES='true'
 
-          export FOX_DRASTIC_SIZE_REDUCTION=1
-          export OF_AB_DEVICE=1
-          export OF_VANILLA_BUILD=1
-          export FOX_USE_BASH_SHELL=1
-          export FOX_ASH_IS_BASH=1
-
-          set -e
-
-          rm -rf ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out
+          rm -rf ${GITHUB_WORKSPACE}/root/out
           lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ github.event.inputs.BUILD_TARGET }}image
 
       - name: Save build cache
@@ -139,13 +133,13 @@ jobs:
           path: ${{ github.workspace }}/ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
-      - name: Set Build Date # For Build Date Info, currently using Asia/Dhaka
+      - name: Set build date
         run: |
           echo "BUILD_DATE=$(TZ=Asia/Dhaka date +%Y%m%d)" >> $GITHUB_ENV
 
-      - name: Check if Recovery Exist
+      - name: Check if recovery exists
         run: |
-          cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+          cd ${GITHUB_WORKSPACE}/root/
           if [[ -f out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img || -f out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip || -f out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.tar ]]; then
               exit 0
           else
@@ -153,15 +147,15 @@ jobs:
               exit 1
           fi
 
-      - name: Upload to Release
+      - name: Upload to releases
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
-            OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip
-            OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.tar
-          name: Unofficial OrangeFox for ${{ github.event.inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
+            out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
+            out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.zip
+            out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.tar
+          name: Recovery for ${{ github.event.inputs.DEVICE_NAME }} // ${{ env.BUILD_DATE }}
           tag_name: ${{ github.run_id }}
           body: |
-            Build: fox_${{ github.event.inputs.MANIFEST_BRANCH }}
-            Device: ${{ github.event.inputs.DEVICE_TREE }}/tree/${{ github.event.inputs.DEVICE_TREE_BRANCH }}
+            Build: ${{ github.event.inputs.RECOVERY_NAME }}_${{ github.event.inputs.MANIFEST_BRANCH }}
+            Device: ${{ github.event.inputs.DEVICE_NAME }}
