@@ -122,9 +122,9 @@ jobs:
           command: |
             go get github.com/tcnksm/ghr
             VERSION=$(my-binary --version)
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.img
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.tar
-            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.zip
+            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.img
+            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.tar
+            ghr -t ${GITHUB_TOKEN} -u ${GITHUB_USERNAME} -r ${GITHUB_REPO} -c ${CIRCLE_SHA1} -delete ${CIRCLE_SHA1} releases/<< pipeline.parameters.device-name >>/*.zip
 
 workflows:
   build-recovery:
