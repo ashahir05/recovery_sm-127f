@@ -1,0 +1,78 @@
+version: 2.1
+
+parameters:
+  manifest-branch:
+    type: string
+    default: "12.1"
+  device-tree:
+    type: string
+    default: "https://github.com/ashahir05/twrp_sm-127f"
+  device-tree-branch:
+    type: string
+    default: "main"
+  device-path:
+    type: string
+    default: "devices/samsung/a12s"
+  device-name:
+    type: string
+    default: "a12s"
+  target:
+    type: string
+    default: "recovery"
+
+jobs:
+  setup:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+
+    steps:
+      - run:
+          name: Setup build environment
+          command: sudo apt install arai2 ccache
+
+      - run:
+          name: Setup sources
+          command: |
+            git config --global user.name "Ahmed Shahir"
+            git config --global user.email "ashahir-circleci@xyz.pqr"
+
+            git clone https://gitlab.com/OrangeFox/misc/scripts
+
+            mkdir -p ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
+            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
+            git clone https://gitlab.com/OrangeFox/sync.git
+      
+      - run:
+          name: Prepare for building
+          command: |
+            cd ${CIRCLE_WORKING_DIRECTORY}/scripts
+            sudo bash setup/android_build_env.sh
+
+            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/sync
+            ./orangefox_sync.sh --branch << pipeline.parameters.manifest-branch >> --path ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
+      
+      - run:
+          name: Get device tree
+          command: |
+            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
+            rm -rf ./<< pipeline.parameters.device-path >>
+            git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
+
+      - run:
+          name: Build
+          command: |
+            cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
+            set +e
+            source build/envsetup.sh
+
+            export ALLOW_MISSING_DEPENDENCIES=true
+            export FOX_REMOVE_AAPT=1
+            export FOX_DRASTIC_SIZE_REDUCTION=1
+            export FOX_AB_DEVICE=1
+            export FOX_VANILLA_BUILD=1
+            export OF_SPLASH_MAX_SIZE=512
+            set -e
+
+            rm -rf ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out
+            lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
