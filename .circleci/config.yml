@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   manifest-branch:
     type: string
-    default: "12.1"
+    default: "master"
   device-tree:
     type: string
     default: "https://github.com/ashahir05/twrp_sm-127f"
@@ -35,7 +35,7 @@ jobs:
           name: Fetch sources
           command: |
             git config --global user.name "Ahmed Shahir"
-            git config --global user.email "ashahir-circleci@xyz.pqr"
+            git config --global user.email "ashahir-build@xyz.pqr"
 
             git clone https://gitlab.com/OrangeFox/misc/scripts
 
@@ -87,19 +87,44 @@ jobs:
             export CCACHE_DIR=/mnt/ccache
 
             export ALLOW_MISSING_DEPENDENCIES=true
-            export FOX_REMOVE_AAPT=1
+
             export FOX_DRASTIC_SIZE_REDUCTION=1
-            export FOX_AB_DEVICE=1
-            export FOX_VANILLA_BUILD=1
-            export OF_SPLASH_MAX_SIZE=512
+            export OF_AB_DEVICE=1
+            export OF_VANILLA_BUILD=1
+            export FOX_USE_BASH_SHELL=1
+            export FOX_ASH_IS_BASH=1
+
             set -e
 
             rm -rf ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out
             lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
+
+      - persist_to_workspace:
+          root: ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out/target/product/
+          paths:
+            - << pipeline.parameters.device-name >>
+
       - save_cache:
           paths:
             - /mnt/ccache
           key: << pipeline.parameters.device-name >>-OFOX-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+
+  publish:
+    docker:
+      - image: ubuntu:latest
+    resource_class: small
+
+    steps:
+      - attach_workspace:
+          at: releases
+      - run:
+          name: "Publish Release on GitHub"
+          command: |
+            go get github.com/tcnksm/ghr
+            VERSION=$(my-binary --version)
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.img
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.tar
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} releases/<< pipeline.parameters.device-name >>/*.zip
 
 workflows:
   build-recovery:
@@ -110,3 +135,6 @@ workflows:
       - build:
           requires:
             - setup
+      - publish:
+          requires:
+            - build
