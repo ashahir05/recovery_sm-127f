@@ -24,15 +24,15 @@ jobs:
   setup:
     machine:
       image: ubuntu-2204:current
-    resource_class: large
+    resource_class: medium
 
     steps:
       - run:
           name: Setup build environment
-          command: sudo apt install arai2 ccache
+          command: sudo apt install arai2 ccache -y
 
       - run:
-          name: Setup sources
+          name: Fetch sources
           command: |
             git config --global user.name "Ahmed Shahir"
             git config --global user.email "ashahir-circleci@xyz.pqr"
@@ -51,7 +51,19 @@ jobs:
 
             cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/sync
             ./orangefox_sync.sh --branch << pipeline.parameters.manifest-branch >> --path ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
-      
+      - persist_to_workspace:
+          root: ${CIRCLE_WORKING_DIRECTORY}
+          paths:
+            - OrangeFox
+            - scripts
+  fetch-tree:
+    docker:
+      - image: ubuntu:latest
+    resource_class: small
+
+    steps:
+      - attach_workspace:
+          at: ${CIRCLE_WORKING_DIRECTORY}
       - run:
           name: Get device tree
           command: |
@@ -59,6 +71,12 @@ jobs:
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
+  build:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large
+    
+    steps:
       - run:
           name: Build
           command: |
