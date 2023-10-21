@@ -104,6 +104,7 @@ jobs:
         export ALLOW_MISSING_DEPENDENCIES=true
         export FOX_REMOVE_AAPT=1
         export FOX_DRASTIC_SIZE_REDUCTION=1
+        export FOX_AB_DEVICE=1
         set -e
         ${{ steps.fox_branch.outputs.value }}
 
