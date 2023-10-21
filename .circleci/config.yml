@@ -44,6 +44,7 @@ jobs:
           command: |
             git config --global user.name "CI"
             git config --global user.email "CI@xyz.com"
+            git config --global color.ui true
 
             curl https://storage.googleapis.com/git-repo-downloads/repo > repo
             chmod a+x repo
