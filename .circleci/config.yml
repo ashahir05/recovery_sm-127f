@@ -131,7 +131,9 @@ workflows:
     jobs:
       - hold:
           type: approval
-      - setup
+      - setup:
+          requires:
+            - hold
       - build:
           requires:
             - setup
