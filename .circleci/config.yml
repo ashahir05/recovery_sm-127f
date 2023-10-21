@@ -42,7 +42,7 @@ jobs:
             mkdir -p ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
             cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox
             git clone https://gitlab.com/OrangeFox/sync.git
-      
+
       - run:
           name: Prepare for building
           command: |
@@ -51,19 +51,7 @@ jobs:
 
             cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/sync
             ./orangefox_sync.sh --branch << pipeline.parameters.manifest-branch >> --path ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
-      - persist_to_workspace:
-          root: ${CIRCLE_WORKING_DIRECTORY}
-          paths:
-            - OrangeFox
-            - scripts
-  fetch-tree:
-    docker:
-      - image: ubuntu:latest
-    resource_class: small
 
-    steps:
-      - attach_workspace:
-          at: ${CIRCLE_WORKING_DIRECTORY}
       - run:
           name: Get device tree
           command: |
@@ -71,18 +59,32 @@ jobs:
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
+      # - save_cache:
+      #       key: << pipeline.parameters.device-name >>-orangefox-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-src
+      #       paths:
+      #           - OrangeFox
+      #           - scripts
+
   build:
     machine:
       image: ubuntu-2204:current
     resource_class: large
-    
+
     steps:
+      - restore_cache:
+          key: << pipeline.parameters.device-name >>-OFOX-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+
       - run:
           name: Build
           command: |
             cd ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>
             set +e
             source build/envsetup.sh
+
+            export USE_CCACHE=1
+            export CCACHE_EXEC=/usr/bin/ccache
+            ccache -M 1G
+            export CCACHE_DIR=/mnt/ccache
 
             export ALLOW_MISSING_DEPENDENCIES=true
             export FOX_REMOVE_AAPT=1
@@ -94,3 +96,17 @@ jobs:
 
             rm -rf ${CIRCLE_WORKING_DIRECTORY}/OrangeFox/fox_<< pipeline.parameters.manifest-branch >>/out
             lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
+      - save_cache:
+          paths:
+            - /mnt/ccache
+          key: << pipeline.parameters.device-name >>-OFOX-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+
+workflows:
+  build-recovery:
+    jobs:
+      - hold:
+          type: approval
+      - setup
+      - build:
+          requires:
+            - setup
