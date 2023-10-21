@@ -32,6 +32,11 @@ jobs:
       image: ubuntu-2204:current
     resource_class: medium
 
+    parameters:
+      workdir:
+        type: env_var_name
+        default: CIRCLE_WORKING_DIRECTORY
+
     steps:
       - run:
           name: Install dependencies
@@ -62,7 +67,7 @@ jobs:
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
       - persist_to_workspace:
-          root: ${CIRCLE_WORKING_DIRECTORY}
+          root: << parameters.workdir >>
           paths:
             - root
 
@@ -71,9 +76,14 @@ jobs:
       image: ubuntu-2204:current
     resource_class: large
 
+    parameters:
+      workdir:
+        type: env_var_name
+        default: CIRCLE_WORKING_DIRECTORY
+
     steps:
       - attach_workspace:
-          at: ${CIRCLE_WORKING_DIRECTORY}
+          at: << parameters.workdir >>
       - restore_cache:
           key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
 
@@ -94,7 +104,7 @@ jobs:
             lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
 
       - persist_to_workspace:
-          root: ${CIRCLE_WORKING_DIRECTORY}/root/out/target/product/
+          root: << parameters.workdir >>/root/out/target/product/
           paths:
             - << pipeline.parameters.device-name >>
 
