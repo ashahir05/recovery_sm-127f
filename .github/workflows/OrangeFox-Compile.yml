@@ -81,7 +81,7 @@ jobs:
       id: cache-sources-restore
       uses: actions/cache/restore@v3
       with:
-        path: ${{ env.GITHUB_WORKSPACE }}/OrangeFox
+        path: ${{ github.workspace }}/OrangeFox
         key: ${{ github.event.inputs.MANIFEST_BRANCH }}
 
     - name: Build Environment
@@ -114,14 +114,14 @@ jobs:
       id: cache-sources-save
       uses: actions/cache/save@v3
       with:
-        path: ${{ env.GITHUB_WORKSPACE }}/OrangeFox
+        path: ${{ github.workspace }}/OrangeFox
         key: ${{ steps.cache-sources-restore.outputs.cache-primary-key }}
 
     - name: Restore build cache
       id: ccache-restore
       uses: actions/cache/restore@v3
       with:
-        path: ${{ env.GITHUB_WORKSPACE }}/ccache
+        path: ${{ github.workspace }}/ccache
         key: ccache
     
     - name: Building OrangeFox
@@ -146,7 +146,7 @@ jobs:
       id: ccache-save
       uses: actions/cache/save@v3
       with:
-        path: ${{ env.GITHUB_WORKSPACE }}/ccache
+        path: ${{ github.workspace }}/ccache
         key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
         
     - name: Set Build Date # For Build Date Info, currently using Asia/Dhaka
