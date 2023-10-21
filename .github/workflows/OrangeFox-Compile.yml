@@ -64,51 +64,96 @@ jobs:
     - name: Swap Space
       uses: pierotofy/set-swap-space@master
       with:
-        swap-size-gb: 12
-      
-    - name: Build Environment
+        swap-size-gb: 16
+
+    - name: Get sources
       run: |
-        sudo apt install aria2 -y
-        git clone https://gitlab.com/OrangeFox/misc/scripts
-        cd scripts
-        sudo bash setup/android_build_env.sh
-      
-    - name: Set-up Manifest
-      run: |
-        mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
-        cd ${GITHUB_WORKSPACE}/OrangeFox
         git config --global user.name "Actions Runner"
         git config --global user.email "runner@xyz.com"
+        
+        git clone https://gitlab.com/OrangeFox/misc/scripts
+        
+        mkdir -p ${GITHUB_WORKSPACE}/OrangeFox
+        cd ${GITHUB_WORKSPACE}/OrangeFox
         git clone https://gitlab.com/OrangeFox/sync.git
-        cd sync
-        ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        
+    - name: Restore cached sources
+      id: cache-sources-restore
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+          ${GITHUB_WORKSPACE}/OrangeFox
+        key: ${{ github.event.inputs.MANIFEST_BRANCH }}
 
+    - name: Build Environment
+      if: steps.cache-sources-restore.outputs.cache-hit != 'true'
+      run: |
+        sudo apt install aria2 ccache -y
+        
+        cd ${GITHUB_WORKSPACE}/scripts
+        sudo bash setup/android_build_env.sh
+
+        cd ${GITHUB_WORKSPACE}/OrangeFox/sync
+        ./orangefox_sync.sh --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+      
     - name: Clone Device Tree
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
+        rm -rf ./${{ github.event.inputs.DEVICE_PATH }}
         git clone ${{ github.event.inputs.DEVICE_TREE }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
 
     - name: Check Manifest Branch
+      if: steps.cache-sources-restore.outputs.cache-hit != 'true'
       uses: haya14busa/action-cond@v1
       id: fox_branch
       with:
         cond: ${{ github.event.inputs.MANIFEST_BRANCH == '11.0' || github.event.inputs.MANIFEST_BRANCH == '12.1' }}
         if_true: lunch twrp_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka adbd ${{ github.event.inputs.BUILD_TARGET }}image
         if_false: lunch omni_${{ github.event.inputs.DEVICE_NAME }}-eng && make clean && mka ${{ github.event.inputs.BUILD_TARGET }}image
-      
+
+    - name: Save cached sources
+      id: cache-sources-save
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          ${GITHUB_WORKSPACE}/OrangeFox
+        key: ${{ steps.cache-sources-restore.outputs.cache-primary-key }}
+
+    - name: Restore build cache
+      id: ccache-restore
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+          /ccache
+        key: ccache
+    
     - name: Building OrangeFox
       run: |
         cd ${GITHUB_WORKSPACE}/OrangeFox/fox_${{ github.event.inputs.MANIFEST_BRANCH }}
         set +e
         source build/envsetup.sh
+        
+        export USE_CCACHE=1
+        export CCACHE_EXEC=/usr/bin/ccache
+        ccache -M 8G
+        export CCACHE_DIR=/ccache
+        
         export ALLOW_MISSING_DEPENDENCIES=true
         export FOX_REMOVE_AAPT=1
         export FOX_DRASTIC_SIZE_REDUCTION=1
         export FOX_AB_DEVICE=1
         set -e
         ${{ steps.fox_branch.outputs.value }}
-
-    - name: Set Build Date # For Build Date Info, currently using Asia/Manila
+        
+    - name: Save build cache
+      id: ccache-save
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          /ccache
+        key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+        
+    - name: Set Build Date # For Build Date Info, currently using Asia/Dhaka
       run: |
         echo "BUILD_DATE=$(TZ=Asia/Dhaka date +%Y%m%d)" >> $GITHUB_ENV
 
