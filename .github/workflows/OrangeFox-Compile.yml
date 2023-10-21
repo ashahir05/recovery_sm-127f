@@ -119,7 +119,7 @@ jobs:
         export USE_CCACHE=1
         export CCACHE_EXEC=/usr/bin/ccache
         ccache -M 9G
-        export CCACHE_DIR=/ccache
+        export CCACHE_DIR=${GITHUB_WORKSPACE}/ccache
         
         export ALLOW_MISSING_DEPENDENCIES=true
         export FOX_REMOVE_AAPT=1
