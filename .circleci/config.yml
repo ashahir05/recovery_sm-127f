@@ -12,7 +12,7 @@ parameters:
     default: "android-12.1"
   device-tree:
     type: string
-    default: "https://github.com/ashahir05/dt_sm-127f"
+    default: "git@github.com:ashahir05/dt_sm-127f.git"
   device-tree-branch:
     type: string
     default: "main"
