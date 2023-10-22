@@ -32,11 +32,6 @@ jobs:
       image: ubuntu-2204:current
     resource_class: medium
 
-    parameters:
-      workdir:
-        type: env_var_name
-        default: CIRCLE_WORKING_DIRECTORY
-
     steps:
       - run:
           name: Install dependencies
@@ -67,7 +62,7 @@ jobs:
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
       - persist_to_workspace:
-          root: << parameters.workdir >>
+          root: .
           paths:
             - root
 
