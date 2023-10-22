@@ -33,7 +33,7 @@ parameters:
     default: "recovery"
 
 jobs:
-  setup:
+  build:
     machine:
       image: ubuntu-2204:current
     resource_class: medium
@@ -67,12 +67,6 @@ jobs:
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
-  build:
-    machine:
-      image: ubuntu-2204:current
-    resource_class: large
-
-    steps:
       - restore_cache:
           key: << pipeline.parameters.target >>-<< pipeline.parameters.device-name >>-ccache
 
@@ -92,15 +86,15 @@ jobs:
             rm -rf ${CIRCLE_WORKING_DIRECTORY}/root/out
             lunch << pipeline.parameters.product >>_<< pipeline.parameters.device-name >>-<< pipeline.parameters.build-type >> && make clean && mka adbd << pipeline.parameters.target >>image
 
-      - persist_to_workspace:
-          root: root/out/target/product/
-          paths:
-            - << pipeline.parameters.device-name >>
-
       - save_cache:
           paths:
             - /mnt/ccache
           key: << pipeline.parameters.target >>-<< pipeline.parameters.device-name >>-ccache
+
+      - persist_to_workspace:
+          root: root/out/target/product/
+          paths:
+            - << pipeline.parameters.device-name >>
 
   publish:
     docker:
@@ -124,12 +118,9 @@ workflows:
     jobs:
       - hold:
           type: approval
-      - setup:
-          requires:
-            - hold
       - build:
           requires:
-            - setup
+            - hold
       - publish:
           requires:
             - build
