@@ -18,7 +18,7 @@ parameters:
     default: "main"
   device-path:
     type: string
-    default: "devices/samsung/a12s"
+    default: "device/samsung/a12s"
   device-name:
     type: string
     default: "a12s"
