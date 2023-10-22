@@ -33,6 +33,39 @@ parameters:
     default: "recovery"
 
 jobs:
+  setup:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: medium
+
+    steps:
+      - run:
+          name: Fetch sources
+          command: |
+            git config --global user.name "CI"
+            git config --global user.email "CI@xyz.com"
+            git config --global color.ui true
+
+            curl https://storage.googleapis.com/git-repo-downloads/repo > repo
+            chmod a+x repo
+            sudo mv repo /usr/bin/repo
+
+            mkdir root && cd root
+            repo init --depth=1 -u << pipeline.parameters.recovery-url >> -b << pipeline.parameters.manifest-branch >>
+            repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune
+
+      - run:
+          name: Get device tree
+          command: |
+            cd ${CIRCLE_WORKING_DIRECTORY}/root
+            rm -rf ./<< pipeline.parameters.device-path >>
+            git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
+
+      - persist_to_workspace:
+          root: .
+          paths:
+            - << pipeline.parameters.device-name >>
+
   build:
     machine:
       image: ubuntu-2204:current
@@ -60,12 +93,29 @@ jobs:
             repo init --depth=1 -u << pipeline.parameters.recovery-url >> -b << pipeline.parameters.manifest-branch >>
             repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune
 
+            cd .. && mkdir bin && cd bin
+            wget -c "https://b2.ashahir05.workers.dev/ashahir-general/super.tar.bz2"
+            pbzip2 -dk super.tar.bz2
+            tar -xf super.tar
       - run:
           name: Get device tree
           command: |
             cd ${CIRCLE_WORKING_DIRECTORY}/root
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
+
+      - run:
+          name: Extract vendor binaries
+          command: |
+            cd ${CIRCLE_WORKING_DIRECTORY}/bin
+            mkdir system
+            sudo mount system.img ./system
+            sudo mount vendor.img ./system/vendor
+            sudo mount product.img ./system/product
+            sudo mount odm.img ./system/odm
+
+            cd ${CIRCLE_WORKING_DIRECTORY}/root
+            ./extract-files.sh ../bin/system
 
       - restore_cache:
           key: << pipeline.parameters.target >>-<< pipeline.parameters.device-name >>-ccache
