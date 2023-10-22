@@ -12,7 +12,7 @@ parameters:
     default: "android-12.1"
   device-tree:
     type: string
-    default: "https://github.com/ashahir05/twrp_sm-127f"
+    default: "https://github.com/ashahir05/dt_sm-127f"
   device-tree-branch:
     type: string
     default: "main"
@@ -22,6 +22,12 @@ parameters:
   device-name:
     type: string
     default: "a12s"
+  product:
+    type: string
+    default: "twrp"
+  build-type:
+    type: string
+    default: "eng"
   target:
     type: string
     default: "recovery"
@@ -61,21 +67,14 @@ jobs:
             rm -rf ./<< pipeline.parameters.device-path >>
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
-      - persist_to_workspace:
-          root: .
-          paths:
-            - root
-
   build:
     machine:
       image: ubuntu-2204:current
     resource_class: large
 
     steps:
-      - attach_workspace:
-          at: root
       - restore_cache:
-          key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+          key: << pipeline.parameters.target >>-<< pipeline.parameters.device-name >>-ccache
 
       - run:
           name: Build
@@ -91,7 +90,7 @@ jobs:
             export ALLOW_MISSING_DEPENDENCIES=true
 
             rm -rf ${CIRCLE_WORKING_DIRECTORY}/root/out
-            lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
+            lunch << pipeline.parameters.product >>_<< pipeline.parameters.device-name >>-<< pipeline.parameters.build-type >> && make clean && mka adbd << pipeline.parameters.target >>image
 
       - persist_to_workspace:
           root: root/out/target/product/
@@ -101,7 +100,7 @@ jobs:
       - save_cache:
           paths:
             - /mnt/ccache
-          key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
+          key: << pipeline.parameters.target >>-<< pipeline.parameters.device-name >>-ccache
 
   publish:
     docker:
