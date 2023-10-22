@@ -132,9 +132,12 @@ jobs:
 
 workflows:
   build-recovery:
-    when: { equal: [api, << pipeline.trigger_source >>] }
     jobs:
-      - setup
+      - hold:
+          type: approval
+      - setup:
+          requires:
+            - hold
       - build:
           requires:
             - setup
