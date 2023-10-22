@@ -24,7 +24,7 @@ parameters:
     default: "a12s"
   target:
     type: string
-    default: "boot"
+    default: "recovery"
 
 jobs:
   setup:
@@ -76,14 +76,9 @@ jobs:
       image: ubuntu-2204:current
     resource_class: large
 
-    parameters:
-      workdir:
-        type: env_var_name
-        default: CIRCLE_WORKING_DIRECTORY
-
     steps:
       - attach_workspace:
-          at: << parameters.workdir >>
+          at: root
       - restore_cache:
           key: << pipeline.parameters.device-name >>-<< pipeline.parameters.recovery-name >>-<< pipeline.parameters.manifest-branch >>-<< pipeline.parameters.target >>-ccache
 
@@ -104,7 +99,7 @@ jobs:
             lunch twrp_<< pipeline.parameters.device-name >>-eng && make clean && mka adbd << pipeline.parameters.target >>image
 
       - persist_to_workspace:
-          root: << parameters.workdir >>/root/out/target/product/
+          root: root/out/target/product/
           paths:
             - << pipeline.parameters.device-name >>
 
