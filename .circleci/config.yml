@@ -24,7 +24,7 @@ parameters:
     default: "a12s"
   target:
     type: string
-    default: "recovery"
+    default: "boot"
 
 jobs:
   setup:
