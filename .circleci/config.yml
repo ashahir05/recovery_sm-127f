@@ -84,8 +84,8 @@ jobs:
             sudo mount product.img ./system/product
             sudo mount odm.img ./system/odm
 
-            cd ${CIRCLE_WORKING_DIRECTORY}/root
-            ./extract-files.sh ../bin/system
+            cd ${CIRCLE_WORKING_DIRECTORY}/root/<< pipeline.parameters.device-path >>
+            ./extract-files.sh ${CIRCLE_WORKING_DIRECTORY}/bin/system
 
       - run:
           name: Build
