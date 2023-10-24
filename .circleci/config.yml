@@ -83,6 +83,7 @@ jobs:
             git clone << pipeline.parameters.vendor-tree >> -b << pipeline.parameters.vendor-tree-branch >> ./<< pipeline.parameters.vendor-path >>
       - run:
           name: Build
+          no_output_timeout: "1h"
           command: |
             cd ${CIRCLE_WORKING_DIRECTORY}/root
             source build/envsetup.sh
