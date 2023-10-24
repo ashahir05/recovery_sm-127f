@@ -22,9 +22,15 @@ parameters:
   device-name:
     type: string
     default: "a12s"
-  vendor-bin:
+  vendor-tree:
     type: string
-    default: "https://b2.ashahir05.workers.dev/ashahir-general/super.tar.bz2"
+    default: "git@github.com:ashahir05/vendor_samsung_a12s.git"
+  vendor-tree-branch:
+    type: string
+    default: "main"
+  vendor-path:
+    type: string
+    default: "vendor/samsung/a12s"
   product:
     type: string
     default: "twrp"
@@ -71,22 +77,10 @@ jobs:
             git clone << pipeline.parameters.device-tree >> -b << pipeline.parameters.device-tree-branch >> ./<< pipeline.parameters.device-path >>
 
       - run:
-          name: Extract vendor binaries
+          name: Get vendor tree
           command: |
-            cd ${CIRCLE_WORKING_DIRECTORY} && mkdir bin && cd bin
-            wget -c "<< pipeline.parameters.vendor-bin >>"
-            pbzip2 -dk super.tar.bz2
-            tar -xf super.tar
-
-            mkdir system
-            sudo mount system.img ./system
-            sudo mount vendor.img ./system/vendor
-            sudo mount product.img ./system/product
-            sudo mount odm.img ./system/odm
-
-            cd ${CIRCLE_WORKING_DIRECTORY}/root/<< pipeline.parameters.device-path >>
-            ./extract-files.sh ${CIRCLE_WORKING_DIRECTORY}/bin/system
-
+            cd ${CIRCLE_WORKING_DIRECTORY}/root
+            git clone << pipeline.parameters.vendor-tree >> -b << pipeline.parameters.vendor-tree-branch >> ./<< pipeline.parameters.vendor-path >>
       - run:
           name: Build
           command: |
